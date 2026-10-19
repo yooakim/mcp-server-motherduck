@@ -263,6 +263,73 @@ The MCP endpoint is available at `http://localhost:8000/mcp`. CLI flags and env 
 - **`spawn uvx ENOENT`**: Specify full path to `uvx` (run `which uvx` to find it)
 - **File locked**: Make sure `--ephemeral-connections` is turned on (default: true) and that you're not connected in read-write mode
 
+### Windows: Python 3.15 dependency build failures
+
+If `uvx` selects Python 3.15, installation can fail before the MCP server starts.
+One confirmed failure is `Failed to build pyyaml==6.0.3`, followed by
+`Microsoft Visual C++ 14.0 or greater is required`. PyYAML is brought in by
+`fastmcp` → `fastmcp-slim[server]` → `pyyaml`; without a compatible wheel,
+uv attempts to compile it from source. The setuptools warnings are not the cause.
+
+Use the working Python 3.13 configuration for now:
+
+```json
+{
+  "mcpServers": {
+    "DuckDB (in-memory, r/w)": {
+      "command": "uvx",
+      "args": ["--python", "3.13", "mcp-server-motherduck", "--db-path", ":memory:", "--read-write", "--allow-switch-databases"]
+    }
+  }
+}
+```
+
+`--python` must precede the package name because it is a uvx option, not a server
+option. It selects the Python 3.13 release series, not a specific patch release.
+The repository's `.python-version` does not pin the interpreter used by a
+published package launched with `uvx`.
+
+As checked on 2026-10-19, the Windows x86-64 wheel situation is:
+
+| Dependency | Python 3.15 Windows wheel |
+| --- | --- |
+| [DuckDB 1.5.6](https://pypi.org/project/duckdb/1.5.6/#files) (current pin and latest release checked) | No; Python 3.13 and 3.14 wheels exist |
+| [PyYAML 6.0.3](https://pypi.org/project/PyYAML/6.0.3/#files) (latest release checked) | No; Python 3.13 and 3.14 wheels exist |
+| [Pydantic Core 2.46.5](https://pypi.org/project/pydantic_core/2.46.5/#files) (locked version) | No |
+| [Pydantic Core 2.50.1](https://pypi.org/project/pydantic_core/2.50.1/#files) (latest release checked) | Yes; this alone does not resolve the other blockers |
+
+Installing MSVC may get past the reported missing-compiler error, but does not
+establish Python 3.15 compatibility for the complete dependency tree. No
+dependency pins have been changed: there is no newer DuckDB or PyYAML release
+with the required wheels in this check. Python 3.15 support needs compatible
+upstream releases, a compatible Pydantic/Pydantic Core resolution, an updated
+lockfile, and passing Windows MCP tests. Changing `requires-python` alone is
+not sufficient.
+
+For diagnostics, run the failing command in PowerShell outside the MCP client:
+
+```powershell
+uvx --verbose --python 3.15 mcp-server-motherduck --db-path ":memory:" --read-write --allow-switch-databases
+```
+
+Omit `--python 3.15` to inspect uvx's default interpreter selection. Record the uv
+version (`uv --version`), selected interpreter, resolved server/dependency
+versions, and the first build failure. Review logs for credentials and personal
+paths before sharing them. `uvx` resolves the published package; it does not use
+this checkout's `uv.lock`.
+
+### Python validation coverage
+
+- The existing cloud/S3 E2E job is configured for Ubuntu and Python 3.11.
+- The secret-free Windows local MCP job targets Python 3.13 and checks CLI
+  startup, stdio MCP communication, in-memory queries, and database switching.
+  The reported Windows 11 configuration above works with Python 3.13; the
+  hosted Windows runner is not a Windows 11 certification.
+- Python 3.15 runs the same Windows checks experimentally (non-blocking).
+  Installation explicitly requires wheels for DuckDB, PyYAML, and Pydantic Core,
+  so missing wheels produce a clear failure instead of an incidental compiler
+  error. Python 3.15 is **not yet validated or supported** by these checks.
+
 ## Resources
 
 - [MotherDuck MCP Documentation](https://motherduck.com/docs/sql-reference/mcp/)

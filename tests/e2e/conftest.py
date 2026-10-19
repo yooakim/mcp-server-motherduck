@@ -6,6 +6,7 @@ configurations and making requests via the FastMCP client.
 """
 
 import os
+import sys
 from pathlib import Path
 from typing import AsyncGenerator
 
@@ -41,9 +42,8 @@ def get_mcp_client(*args: str, env: dict | None = None) -> Client:
     Returns:
         Client configured to launch the server via stdio
     """
-    # Use uv run to invoke the installed script
-    # This ensures we're using the local package from the workspace
-    server_args = ["run", "mcp-server-motherduck"]
+    # Keep the server on the same interpreter and installed package as pytest.
+    server_args = ["-c", "from mcp_server_motherduck import main; main()"]
     server_args.extend(args)
 
     # Merge environment
@@ -56,7 +56,7 @@ def get_mcp_client(*args: str, env: dict | None = None) -> Client:
     # Create StdioTransport with proper configuration
     # keep_alive=False ensures subprocess is terminated when connection closes
     transport = StdioTransport(
-        command="uv",
+        command=sys.executable,
         args=server_args,
         env=full_env,
         keep_alive=False,
