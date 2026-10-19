@@ -11,6 +11,8 @@ jobs:
   windows-local:
     name: Windows local MCP (Python ${{ matrix.python-version }})
     runs-on: windows-latest
+    permissions:
+      contents: read
     timeout-minutes: 15
     continue-on-error: ${{ matrix.experimental }}
     strategy:
